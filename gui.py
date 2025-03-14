@@ -26,14 +26,7 @@ class LoginDialog(QDialog):
 
 
         self.password_label = QLabel("Пароль:")
-        self.password_input = QLineEdit()
-        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-
-        self.toggle_password_button = QPushButton("👁️")
-        self.toggle_password_button.setCheckable(True)
-        self.toggle_password_button.setFixedSize(30, 25)
-        self.toggle_password_button.clicked.connect(
-            lambda: toggle_password_visibility(self.password_input, self.toggle_password_button))
+        self.password_widget, self.password_input, self.toggle_password_button = create_password_widget()
 
         self.login_button = QPushButton("Увійти")
         self.login_button.clicked.connect(self.check_login)
@@ -53,18 +46,12 @@ class LoginDialog(QDialog):
             }
         """)
 
-        password_widget = QWidget()
-        password_layout = QHBoxLayout(password_widget)
-        password_layout.setContentsMargins(0, 0, 0, 0)
-        password_layout.addWidget(self.password_input)
-        password_layout.addWidget(self.toggle_password_button)
-
         layout = QVBoxLayout()
         layout.addWidget(self.username_label)
         layout.addWidget(self.username_combo)
         # layout.addWidget(self.username_input)
         layout.addWidget(self.password_label)
-        layout.addWidget(password_widget)
+        layout.addWidget(self.password_widget)
         layout.addWidget(self.login_button)
         layout.addWidget(self.create_user)
 
@@ -107,29 +94,16 @@ class CreateNewUserDialog(QDialog):
         self.username_input = QLineEdit()
 
         self.password_label = QLabel("Пароль:")
-        self.password_input = QLineEdit()
-        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-
-        self.toggle_password_button = QPushButton("👁️")
-        self.toggle_password_button.setCheckable(True)
-        self.toggle_password_button.setFixedSize(30, 25)
-        self.toggle_password_button.clicked.connect(
-            lambda: toggle_password_visibility(self.password_input, self.toggle_password_button))
+        self.password_widget, self.password_input, self.toggle_password_button = create_password_widget()
 
         self.create_button = QPushButton("Створити")
         self.create_button.clicked.connect(self.create_user)
-
-        password_widget = QWidget()
-        password_layout = QHBoxLayout(password_widget)
-        password_layout.setContentsMargins(0, 0, 0, 0)
-        password_layout.addWidget(self.password_input)
-        password_layout.addWidget(self.toggle_password_button)
 
         layout = QVBoxLayout()
         layout.addWidget(self.username_label)
         layout.addWidget(self.username_input)
         layout.addWidget(self.password_label)
-        layout.addWidget(password_widget)
+        layout.addWidget(self.password_widget)
         layout.addWidget(self.create_button)
 
         self.setLayout(layout)
@@ -147,7 +121,7 @@ class CreateNewUserDialog(QDialog):
             QMessageBox.warning(self, "Помилка", "Логін та пароль не можуть бути пустими")
             return
 
-        if not self.checking_password(password):
+        if not checking_password(password):
             QMessageBox.warning(self, "Помилка", "Пароль має містити латинські букви, кирилицю та цифри")
             return
 
@@ -156,24 +130,90 @@ class CreateNewUserDialog(QDialog):
         self.accept()
 
 
-    def checking_password(self, password):
-        has_latin = re.search(r'[A-Za-z]', password) is not None
-        has_cyrillic = re.search(r'[А-Яа-яЁёЇїІіЄєҐґ]', password) is not None
-        has_digit = re.search(r'\d', password) is not None
-
-        return has_latin and has_cyrillic and has_digit
-
-
 class MainApp(QMainWindow):
     def __init__(self, username, db):
         super().__init__()
+        self.resize(300, 200)
         self.db = db
+        self.username = username
 
-        self.setWindowTitle("Головне вікно")
-        self.setGeometry(100, 100, 600, 400)
-        label = QLabel(f"{username},  Вітаємо у програмі!", self)
-        label.setGeometry(200, 150, 200, 50)
+        role = self.db.get_user_role(username)
+        if role == "admin":
+            self.setWindowTitle("Головне вікно (адміністратор)")
+        else:
+            self.setWindowTitle("Головне вікно")
 
+        self.change_password = QPushButton("Змінити пароль")
+        self.change_password.clicked.connect(self.password_change)
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        layout = QVBoxLayout()
+        central_widget.setLayout(layout)
+        layout.addWidget(self.change_password)
+
+    def password_change(self):
+        dialog = ChangePasswordDialog(self.username, self.db)
+        dialog.exec()
+
+
+class ChangePasswordDialog(QDialog):
+    def __init__(self, username, db):
+        super().__init__()
+        self.resize(300, 200)
+        self.db = db
+        self.username = username
+
+        self.setWindowTitle(f"Зміна пароля для {username}")
+
+        self.password_label = QLabel("Старий пароль:")
+        self.password_widget, self.password_input, self.toggle_password_button = create_password_widget()
+
+        self.new_password_label = QLabel("Новий пароль:")
+        self.new_password_widget, self.new_password_input, self.toggle_new_password_button = create_password_widget()
+
+        self.repeat_new_password_label = QLabel("Повторіть новий пароль:")
+        self.repeat_new_password_widget, self.repeat_new_password_input, self.toggle_repeat_new_password_button = create_password_widget()
+
+        self.change_button = QPushButton("Змінити")
+        self.change_button.clicked.connect(self.change_password)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.password_label)
+        layout.addWidget(self.password_widget)
+        layout.addWidget(self.new_password_label)
+        layout.addWidget(self.new_password_widget)
+        layout.addWidget(self.repeat_new_password_label)
+        layout.addWidget(self.repeat_new_password_widget)
+        layout.addWidget(self.change_button)
+
+        self.setLayout(layout)
+
+    def change_password(self):
+        old_password = self.password_input.text()
+        new_password = self.new_password_input.text()
+        repeat_new_password = self.repeat_new_password_input.text()
+
+        if not self.db.get_user(self.username, old_password):
+            QMessageBox.warning(self, "Помилка", "Невірний старий пароль")
+            return
+
+        if new_password != repeat_new_password:
+            QMessageBox.warning(self, "Помилка", "Новий пароль не співпадає")
+            return
+
+        self.db.change_password(self.username, new_password)
+        QMessageBox.information(self, "Успіх", "Пароль змінено")
+        self.accept()
+
+
+def checking_password(password):
+    has_latin = re.search(r'[A-Za-z]', password) is not None
+    has_cyrillic = re.search(r'[А-Яа-яЁёЇїІіЄєҐґ]', password) is not None
+    has_digit = re.search(r'\d', password) is not None
+
+    return has_latin and has_cyrillic and has_digit
 
 def toggle_password_visibility(password_input: QLineEdit, toggle_password_button: QPushButton):
     if toggle_password_button.isChecked():
@@ -182,6 +222,24 @@ def toggle_password_visibility(password_input: QLineEdit, toggle_password_button
     else:
         password_input.setEchoMode(QLineEdit.EchoMode.Password)
         toggle_password_button.setText("👁️")
+
+def create_password_widget():
+    line_edit = QLineEdit()
+    line_edit.setEchoMode(QLineEdit.EchoMode.Password)
+
+    button = QPushButton("👁️")
+    button.setCheckable(True)
+    button.setFixedSize(30, 25)
+    button.clicked.connect(lambda: toggle_password_visibility(line_edit, button))
+
+    widget = QWidget()
+    layout = QHBoxLayout(widget)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(line_edit)
+    layout.addWidget(button)
+
+    return widget, line_edit, button
+
 
 
 if __name__ == "__main__":
