@@ -84,7 +84,7 @@ class LoginDialog(QDialog):
             QMessageBox.information(self, "Увага", "Користувача не створено")
 
 class CreateNewUserDialog(QDialog):
-    def __init__(self, db):
+    def __init__(self, db, admin=False):
         super().__init__()
         self.db = db
 
@@ -96,14 +96,26 @@ class CreateNewUserDialog(QDialog):
         self.password_label = QLabel("Пароль:")
         self.password_widget, self.password_input, self.toggle_password_button = create_password_widget()
 
-        self.create_button = QPushButton("Створити")
-        self.create_button.clicked.connect(self.create_user)
-
         layout = QVBoxLayout()
         layout.addWidget(self.username_label)
         layout.addWidget(self.username_input)
         layout.addWidget(self.password_label)
         layout.addWidget(self.password_widget)
+
+        if admin == True:
+            self.password_restriction_label = QLabel("Обмеження паролю:")
+            self.password_restriction = QComboBox()
+            self.password_restriction.addItems(["Так", "Ні"])
+            layout.addWidget(self.password_restriction_label)
+            layout.addWidget(self.password_restriction)
+
+            self.create_button = QPushButton("Створити")
+            self.create_button.clicked.connect(self.create_user_for_admin)
+        else:
+            self.create_button = QPushButton("Створити")
+            self.create_button.clicked.connect(self.create_user)
+
+
         layout.addWidget(self.create_button)
 
         self.setLayout(layout)
@@ -129,6 +141,31 @@ class CreateNewUserDialog(QDialog):
         QMessageBox.information(self, "Успіх", f"Новий користувач {username} створений")
         self.accept()
 
+    def create_user_for_admin(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        password_restriction = self.password_restriction.currentText()
+
+        if password_restriction == "Так":
+            password_restriction = 1
+            if not checking_password(password):
+                QMessageBox.warning(self, "Помилка", "Пароль має містити латинські букви, кирилицю та цифри")
+                return
+        else:
+            password_restriction = 0
+
+        if self.db.check_login(username):
+            QMessageBox.warning(self, "Помилка", f"Користувач з логіном {username} вже існує")
+            return
+
+        if not username:
+            QMessageBox.warning(self, "Помилка", "Логін не може бути пустими")
+            return
+
+        self.db.create_user(username, password, password_restriction=password_restriction)
+        QMessageBox.information(self, "Успіх", f"Новий користувач {username} створений")
+        self.accept()
+
 
 class MainApp(QMainWindow):
     def __init__(self, username, db):
@@ -146,15 +183,24 @@ class MainApp(QMainWindow):
         self.change_password = QPushButton("Змінити пароль")
         self.change_password.clicked.connect(self.password_change)
 
+        self.users_table = QPushButton("Список користувачів")
+        self.users_table.clicked.connect(self.show_users_table)
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
         layout.addWidget(self.change_password)
+        if role == "admin":
+            layout.addWidget(self.users_table)
 
     def password_change(self):
         dialog = ChangePasswordDialog(self.username, self.db)
+        dialog.exec()
+
+    def show_users_table(self):
+        dialog = UsersTableDialog(self.db, self.username)
         dialog.exec()
 
 
@@ -203,8 +249,157 @@ class ChangePasswordDialog(QDialog):
             QMessageBox.warning(self, "Помилка", "Новий пароль не співпадає")
             return
 
+        if self.db.get_password_restriction(self.username) == 1:
+            if not checking_password(new_password):
+                QMessageBox.warning(self, "Помилка", "Пароль має містити латинські букви, кирилицю та цифри")
+                return
+
         self.db.change_password(self.username, new_password)
         QMessageBox.information(self, "Успіх", "Пароль змінено")
+        self.accept()
+
+class UsersTableDialog(QDialog):
+    def __init__(self, db, own_username):
+        super().__init__()
+        self.db = db
+        self.own_username = own_username
+        self.setWindowTitle("Список користувачів")
+        self.resize(490, 300)
+
+        self.users_table = QTableWidget()
+        self.users_table.setColumnCount(4)
+        self.users_table.setHorizontalHeaderLabels(["Логін", "Роль", "Обмеження паролю", "Статус"])
+        self.users_table.setColumnWidth(2, 150)
+        self.users_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.users_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.users_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.users_table.doubleClicked.connect(self.change_user_role)
+
+        self.fill_table()
+
+        self.change_role_button = QPushButton("Змінити роль")
+        self.change_role_button.clicked.connect(self.change_user_role)
+
+        self.add_unique_user = QPushButton("Додати унікального користувача")
+        self.add_unique_user.clicked.connect(self.add_uni_user)
+
+        self.block_user = QPushButton("Заблокувати/розблокувати користувача")
+        self.block_user.clicked.connect(self.block_unblock_user)
+
+        self.change_password_restriction = QPushButton("Змінити обмеження паролю")
+        self.change_password_restriction.clicked.connect(self.change_password_restriction_func)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.users_table)
+        layout.addWidget(self.change_role_button)
+        layout.addWidget(self.add_unique_user)
+        layout.addWidget(self.block_user)
+        layout.addWidget(self.change_password_restriction)
+
+        self.setLayout(layout)
+
+    def fill_table(self):
+        self.users_table.setRowCount(0)
+        for user in self.db.get_all_users():
+            row_position = self.users_table.rowCount()
+            self.users_table.insertRow(row_position)
+            self.users_table.setItem(row_position, 0, QTableWidgetItem(user[1]))
+            if user[3] == "admin":
+                self.users_table.setItem(row_position, 1, QTableWidgetItem("Адміністратор"))
+            else:
+                self.users_table.setItem(row_position, 1, QTableWidgetItem("Користувач"))
+
+            if user[4] == 1:
+                self.users_table.setItem(row_position, 2, QTableWidgetItem("Так"))
+            else:
+                self.users_table.setItem(row_position, 2, QTableWidgetItem("Ні"))
+
+            if user[5] == 1:
+                self.users_table.setItem(row_position, 3, QTableWidgetItem("Заблокований"))
+            else:
+                self.users_table.setItem(row_position, 3, QTableWidgetItem("Активний"))
+
+
+    def change_user_role(self):
+        selected_row = self.users_table.currentRow()
+        login = self.users_table.item(selected_row, 0).text()
+
+        if login == self.own_username:
+            QMessageBox.warning(self, "Помилка", "Неможливо понизити собі роль")
+            return
+
+        dialog = ChangeUserRoleDialog(self.db, login)
+        dialog.exec()
+        self.fill_table()
+
+    def add_uni_user(self):
+        dialog = CreateNewUserDialog(self.db, admin=True)
+        if dialog.exec():
+            self.fill_table()
+        else:
+            QMessageBox.information(self, "Увага", "Користувача не створено")
+
+    def block_unblock_user(self):
+        selected_row = self.users_table.currentRow()
+        login = self.users_table.item(selected_row, 0).text()
+        block = self.users_table.item(selected_row, 3).text()
+
+        if login == self.own_username:
+            QMessageBox.warning(self, "Помилка", "Неможливо заблокувати себе")
+            return
+
+        if block == "Заблокований":
+            self.db.change_block(login, 0)
+            QMessageBox.information(self, "Успіх", f"Користувач {login} розблокований")
+        else:
+            self.db.change_block(login, 1)
+            QMessageBox.information(self, "Успіх", f"Користувач {login} заблокований")
+
+        self.fill_table()
+
+    def change_password_restriction_func(self):
+        selected_row = self.users_table.currentRow()
+        login = self.users_table.item(selected_row, 0).text()
+        password_restriction = self.users_table.item(selected_row, 2).text()
+
+        if password_restriction == "Так":
+            self.db.change_password_restriction(login, 0)
+            QMessageBox.information(self, "Успіх", f"Обмеження паролю для {login} відключено")
+        else:
+            self.db.change_password_restriction(login, 1)
+            QMessageBox.information(self, "Успіх", f"Обмеження паролю для {login} включено")
+
+        self.fill_table()
+
+
+class ChangeUserRoleDialog(QDialog):
+    def __init__(self, db, login):
+        super().__init__()
+        self.login = login
+        self.db = db
+        self.setWindowTitle("Зміна ролі")
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(f"Змінити роль для {login}"))
+
+        self.choose_role = QComboBox(self)
+        self.choose_role.addItems(["Адміністратор", "Користувач"])
+        layout.addWidget(self.choose_role)
+
+        self.change_button = QPushButton("Змінити")
+        self.change_button.clicked.connect(self.change_role)
+        layout.addWidget(self.change_button)
+
+    def change_role(self):
+        role_cyrillic = self.choose_role.currentText()
+        if role_cyrillic == "Адміністратор":
+            role = "admin"
+        else:
+            role = "user"
+
+        self.db.change_role(self.login, role)
+
+        QMessageBox.information(self, "Успіх", f"Роль змінена на {role_cyrillic}")
         self.accept()
 
 
