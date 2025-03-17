@@ -6,6 +6,7 @@ from PyQt6.QtGui import QPixmap, QAction
 from db import UsersDB
 import sys
 import re
+import os
 
 
 class LoginDialog(QDialog):
@@ -179,12 +180,12 @@ class MainApp(QMainWindow):
         if role == "admin":
             self.setWindowTitle("Головне вікно (адміністратор)")
             banner = QLabel()
-            banner.setPixmap(QPixmap("raccoon.jpg"))
+            banner.setPixmap(QPixmap(get_resource_path("raccoon.jpg")))
             banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         else:
             self.setWindowTitle("Головне вікно")
             banner = QLabel()
-            banner.setPixmap(QPixmap("raccoon_simple.jpg"))
+            banner.setPixmap(QPixmap(get_resource_path("raccoon_simple.jpg")))
             banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.change_password = QPushButton("Змінити пароль")
@@ -555,6 +556,12 @@ def create_password_widget():
 
     return widget, line_edit, button
 
+def get_resource_path(relative_path):
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(__file__)
+    return os.path.join(base_path, relative_path)
 
 
 if __name__ == "__main__":
