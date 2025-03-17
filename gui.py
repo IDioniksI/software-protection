@@ -1,10 +1,8 @@
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QListWidget, QTextEdit, QHBoxLayout, QVBoxLayout, QLabel,
-                             QWidget, QPushButton, QDialog, QLineEdit, QMessageBox, QMenu, QInputDialog,
-                             QScrollArea, QComboBox, QFileDialog, QDateEdit, QTableWidgetItem, QTableWidget,
-                             QCheckBox, QDateTimeEdit, QDialogButtonBox, QGridLayout, QFrame, QToolBar)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QLabel, QWidget, QPushButton,
+                             QDialog, QLineEdit, QMessageBox, QComboBox, QTableWidgetItem, QTableWidget)
 
-from PyQt6.QtCore import Qt, QDate, QByteArray, QDateTime, QSize
-from PyQt6.QtGui import QPixmap, QFont, QAction
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap, QAction
 from db import UsersDB
 import sys
 import re
@@ -62,12 +60,11 @@ class LoginDialog(QDialog):
         username = self.username_combo.currentText()
         password = self.password_input.text()
 
-        if self.db.get_block(username) == 1:
-            QMessageBox.warning(self, "Помилка", f"Аккаунт {username} заблоковано, оберіть інший")
-            return
-
         user = self.db.get_user(username, password)
         if user:
+            if self.db.get_block(username) == 1:
+                QMessageBox.warning(self, "Помилка", f"Аккаунт {username} заблоковано, оберіть інший")
+                return
             self.selected_user = username
             self.accept()
         else:
@@ -181,8 +178,14 @@ class MainApp(QMainWindow):
         role = self.db.get_user_role(username)
         if role == "admin":
             self.setWindowTitle("Головне вікно (адміністратор)")
+            banner = QLabel()
+            banner.setPixmap(QPixmap("raccoon.jpg"))
+            banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         else:
             self.setWindowTitle("Головне вікно")
+            banner = QLabel()
+            banner.setPixmap(QPixmap("raccoon_simple.jpg"))
+            banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.change_password = QPushButton("Змінити пароль")
         self.change_password.clicked.connect(self.password_change)
@@ -194,14 +197,33 @@ class MainApp(QMainWindow):
         self.setCentralWidget(central_widget)
 
         menu_bar = self.menuBar()
+
+        menu_bar.setStyleSheet("""
+            QMenuBar {
+                background-color: #d1cfcf;
+                border-top: 1px solid black;
+                border-bottom: 1px solid black;
+            }
+            QMenuBar::item:selected {
+                background-color: #9c9898;
+            }
+            QMenu {
+                background-color: #d1cfcf;
+                border: 1px solid black;
+            }
+            QMenu::item:selected {
+                background-color: #9c9898;
+            }
+        """)
+
         file_menu = menu_bar.addMenu("Довідка")
         about_program = QAction("Про програму", self)
         about_program.triggered.connect(self.about_program_dialog)
         file_menu.addAction(about_program)
-        # file_menu.addSeparator()
 
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
+        layout.addWidget(banner)
         layout.addWidget(self.change_password)
         if role == "admin":
             layout.addWidget(self.users_table)
@@ -236,7 +258,7 @@ class FirstEntDialog(QDialog):
 
         self.setWindowTitle(f"Перший вхід для {username}")
 
-        self.first_ent_label = QLabel("Ви вперше ввійшли після створення аккаунту, або після зміни обмеження парполю")
+        self.first_ent_label = QLabel("Ви вперше ввійшли після створення аккаунту, або після зміни обмеження паролю")
         self.first_ent_label_2 = QLabel("Оберіть нижче дію, яку ви хочете виконати:")
 
         self.change_password = QPushButton("Змінити пароль")
@@ -259,7 +281,10 @@ class FirstEntDialog(QDialog):
 
     def password_change(self):
         dialog = ChangePasswordDialog(self.username, self.db)
-        dialog.exec()
+        result = dialog.exec()
+
+        if result == QDialog.DialogCode.Accepted:
+            self.accept()
 
     def quit_app(self):
         QApplication.instance().quit()
