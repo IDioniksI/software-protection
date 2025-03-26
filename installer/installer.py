@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QLabel, QWi
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
-from app.functions.get_info import get_information, hash_data
+from functions.get_info import get_information, hash_data
 
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
@@ -52,7 +52,7 @@ class Installer(QMainWindow):
         self.next_page.clicked.connect(self.show_progress_page)
 
         banner = QLabel()
-        banner.setPixmap(QPixmap("install.jpg"))
+        banner.setPixmap(QPixmap(get_resource_path("install.jpg")))
         banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(banner)
@@ -76,7 +76,7 @@ class Installer(QMainWindow):
         self.cancel_button.clicked.connect(self.cancel_installation)
 
         banner = QLabel()
-        banner.setPixmap(QPixmap("install.jpg"))
+        banner.setPixmap(QPixmap(get_resource_path("install.jpg")))
         banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(banner)
@@ -97,7 +97,7 @@ class Installer(QMainWindow):
         self.complete_install.clicked.connect(QApplication.quit)
 
         banner = QLabel()
-        banner.setPixmap(QPixmap("install.jpg"))
+        banner.setPixmap(QPixmap(get_resource_path("install.jpg")))
         banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(banner)
