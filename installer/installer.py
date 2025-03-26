@@ -3,17 +3,14 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QLabel, QWi
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
-from functions.get_info import get_information, hash_data
-
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization, hashes
+from functions.get_info import get_information
+from functions.registry import keys_generation_data_signing
 
 import time as t
 
 import os
 import sys
 import shutil
-import winreg
 
 
 reg_path = r"SOFTWARE\Kravchenko"
@@ -134,7 +131,7 @@ class Installer(QMainWindow):
         self.progress_label.setText("Встановлення завершено")
 
         all_info = get_information(os.path.splitdrive(self.path_edit.text())[0] + r'\\')
-        print(all_info)
+        # print(all_info)
         keys_generation_data_signing(all_info)
 
         self.stacked_widget.setCurrentWidget(self.page_finish)
@@ -177,45 +174,6 @@ def get_resource_path(relative_path):
         base_path = os.path.dirname(__file__)
     return os.path.join(base_path, relative_path)
 
-
-def write_to_registry(param_value, param_name='Signature'):
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path, 0, winreg.KEY_SET_VALUE) as key:
-            winreg.SetValueEx(key, param_name, 0, winreg.REG_BINARY, param_value)
-            print(f"Параметр '{param_name}' успішно записано у реєстр")
-    except FileNotFoundError:
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, reg_path) as key:
-            print(f"Ключ реєстру створено: {reg_path}")
-        write_to_registry(param_value, param_name)
-
-def sign_data(data: str, private_key) -> bytes:
-    """Підписує SHA-256 хеш даних за допомогою переданого приватного ключа"""
-    hash_object = hash_data(data)
-    signature = private_key.sign(
-        hash_object,
-        padding.PSS(
-            mgf=padding.MGF1(hashes.SHA256()),
-            salt_length=padding.PSS.MAX_LENGTH
-        ),
-        hashes.SHA256()
-    )
-    return signature
-
-def keys_generation_data_signing(system_info):
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_key = private_key.public_key()
-
-    public_pem = public_key.public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-
-    write_to_registry(public_pem, "PublicKey")
-
-
-    signature = sign_data(system_info, private_key)
-
-    write_to_registry(signature)
 
 if __name__ == "__main__":
     app = QApplication([])

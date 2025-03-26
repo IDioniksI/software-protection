@@ -3,8 +3,6 @@ import ctypes
 from screeninfo import get_monitors
 import psutil
 import json
-import hashlib
-import sys
 
 
 def get_information(path):
@@ -30,6 +28,7 @@ def get_information(path):
     drives = [d.device for d in psutil.disk_partitions()]
     # Отримати обсяг диска, на якому встановлена програма
     usage = psutil.disk_usage(path)
+    usage = usage.total
 
     system_info = {
         "Username": username,
@@ -44,28 +43,6 @@ def get_information(path):
 
     return json.dumps(system_info, indent=4)
 
-
-def hash_data(data: str) -> bytes:
-    """
-    Хешує вхідні дані за допомогою SHA-256
-
-    :param data: вхідні дані (plain text)
-    :return: хеш вхідних даних
-    """
-    hash_object = hashlib.sha256(data.encode('utf-8'))
-    return hash_object.digest()
-
-
-def compare_hashes(data1: str, data2: str) -> bool:
-    """
-    Порівнює хеші двох вхідних рядків.
-
-    :param data1: перший вхідний рядок
-    :param data2: другий вхідний рядок
-    :return: True, якщо хеші однакові, інакше False
-    """
-    # return hash_data(data1) == hash_data(data2)
-    return data1 == data2
 
 
 if __name__ == "__main__":

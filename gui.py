@@ -1,9 +1,12 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QLabel, QWidget, QPushButton,
                              QDialog, QLineEdit, QMessageBox, QComboBox, QTableWidgetItem, QTableWidget)
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QAction
+
+from installer.functions.get_info import get_information
+from installer.functions.registry import load_signature_from_registry, verify_signature, hash_data
 from db import UsersDB
+
 import sys
 import re
 import os
@@ -566,6 +569,19 @@ def get_resource_path(relative_path):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    all_info = get_information(os.path.splitdrive(os.getcwd())[0] + r'\\')
+    hashed_info = hash_data(all_info)
+
+    public_key_pem = load_signature_from_registry(parameter='PublicKey')
+
+    if not public_key_pem:
+        QMessageBox.warning(None, 'Помилка', 'Відсутні записи програми в реєстрі \nПеревстановіть програму')
+        sys.exit(0)
+
+    if not verify_signature(public_key_pem, hashed_info):
+        QMessageBox.warning(None, 'Помилка', 'Інформація про систему була змінена \nПрограма закривається')
+        sys.exit(0)
 
     login_dialog = LoginDialog()
     if login_dialog.exec() == QDialog.DialogCode.Accepted:
