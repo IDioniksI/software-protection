@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QAction
 
 from installer.functions.get_info import get_information
-from installer.functions.registry import load_signature_from_registry, verify_signature, hash_data
+from installer.functions.registry import load_from_registry, verify_signature, hash_data
 from db import UsersDB
 
 import sys
@@ -25,7 +25,6 @@ class LoginDialog(QDialog):
         self.username_combo = QComboBox()
         self.username_combo.addItems(self.db.get_all_logins())
         # self.username_input = QLineEdit()
-
 
         self.password_label = QLabel("Пароль:")
         self.password_widget, self.password_input, self.toggle_password_button = create_password_widget()
@@ -573,7 +572,7 @@ if __name__ == "__main__":
     all_info = get_information(os.path.splitdrive(os.getcwd())[0] + r'\\')
     hashed_info = hash_data(all_info)
 
-    public_key_pem = load_signature_from_registry(parameter='PublicKey')
+    public_key_pem = load_from_registry(parameter='PublicKey')
 
     if not public_key_pem:
         QMessageBox.warning(None, 'Помилка', 'Відсутні записи програми в реєстрі \nПеревстановіть програму')

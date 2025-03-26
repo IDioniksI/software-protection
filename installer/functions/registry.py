@@ -3,9 +3,10 @@ import hashlib
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
+import json
 
 
-def load_signature_from_registry(section=r"SOFTWARE\Kravchenko", parameter="Signature"):
+def load_from_registry(section=r"SOFTWARE\Kravchenko", parameter="Signature"):
     """
     Зчитує інформацію з реєстру
 
@@ -15,11 +16,12 @@ def load_signature_from_registry(section=r"SOFTWARE\Kravchenko", parameter="Sign
     """
     try:
         reg_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, section)
-        signature, _ = winreg.QueryValueEx(reg_key, parameter)
+        info, _ = winreg.QueryValueEx(reg_key, parameter)
         winreg.CloseKey(reg_key)
-        return signature
+        return info
     except Exception:
         return None
+
 
 def verify_signature(public_key_pem: bytes, hashed_data):
     """
@@ -30,7 +32,7 @@ def verify_signature(public_key_pem: bytes, hashed_data):
     :return: True - якщо підпис дійсний, False - якщо підпис недійсний
     """
     public_key = serialization.load_pem_public_key(public_key_pem)
-    signature = load_signature_from_registry()
+    signature = load_from_registry()
     if not signature:
         return False
 
@@ -47,6 +49,7 @@ def verify_signature(public_key_pem: bytes, hashed_data):
         return True
     except Exception:
         return False
+
 
 def write_to_registry(param_value, param_name='Signature', reg_path=r"SOFTWARE\Kravchenko"):
     """
@@ -65,6 +68,7 @@ def write_to_registry(param_value, param_name='Signature', reg_path=r"SOFTWARE\K
             pass
         write_to_registry(param_value, param_name)
 
+
 def sign_data(data: str, private_key) -> bytes:
     """
     Підписує хеш даних за допомогою приватного ключа
@@ -74,6 +78,7 @@ def sign_data(data: str, private_key) -> bytes:
     :return: Підписані дані
     """
     hash_object = hash_data(data)
+    # print('Хеш:', hash_object)
     signature = private_key.sign(
         hash_object,
         padding.PSS(
@@ -83,6 +88,7 @@ def sign_data(data: str, private_key) -> bytes:
         hashes.SHA256()
     )
     return signature
+
 
 def keys_generation_data_signing(system_info):
     """
@@ -100,10 +106,8 @@ def keys_generation_data_signing(system_info):
     )
 
     write_to_registry(public_pem, "PublicKey")
-
-
     signature = sign_data(system_info, private_key)
-
+    # print('\nБайти:', signature)
     write_to_registry(signature)
 
 
@@ -116,3 +120,21 @@ def hash_data(data: str) -> bytes:
     """
     hash_object = hashlib.sha256(data.encode('utf-8'))
     return hash_object.digest()
+
+if __name__ == '__main__':
+    system_info = {
+    "Username": "maxww",
+    "Computer Name": "DESKTOP-US13V84",
+    "OS Folder": "C:\\Windows",
+    "System32 Folder": "C:\\Windows\\System32",
+    "Mouse Buttons": 5,
+    "Screen Width": 1920,
+    "Disk Drives": [
+        "C:\\",
+        "E:\\",
+        "F:\\"
+    ],
+    "Disk Space": 480101003264
+    }
+    dump_info = json.dumps(system_info, indent=4)
+    keys_generation_data_signing(dump_info)

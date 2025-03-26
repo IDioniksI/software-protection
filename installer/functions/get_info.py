@@ -38,7 +38,7 @@ def get_information(path):
         "Mouse Buttons": num_buttons,
         "Screen Width": width,
         "Disk Drives": drives,
-        "Disk Free Space": usage
+        "Disk Space": usage
     }
 
     return json.dumps(system_info, indent=4)

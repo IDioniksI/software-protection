@@ -19,9 +19,8 @@ reg_path = r"SOFTWARE\Kravchenko"
 class Installer(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Програма для встановлення My Security Program")
+        self.setWindowTitle("Інсталятор My Security Program")
         self.resize(400, 250)
-        self.disk = None
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
@@ -88,7 +87,7 @@ class Installer(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout()
 
-        self.finish_label = QLabel("Вітаю, програма встановлена успішно")
+        self.finish_label = QLabel("Програма встановлена успішно")
 
         self.complete_install = QPushButton("Завершити")
         self.complete_install.clicked.connect(QApplication.quit)
@@ -131,12 +130,15 @@ class Installer(QMainWindow):
         self.progress_label.setText("Встановлення завершено")
 
         all_info = get_information(os.path.splitdrive(self.path_edit.text())[0] + r'\\')
-        # print(all_info)
+        print(all_info)
         keys_generation_data_signing(all_info)
 
         self.stacked_widget.setCurrentWidget(self.page_finish)
 
     def cancel_installation(self):
+        if hasattr(self, "worker") and self.worker.isRunning():
+            self.worker.stop()
+
         QMessageBox.information(self, "Скасовано", "Встановлення скасовано.")
         self.stacked_widget.setCurrentWidget(self.page_select_path)
 
@@ -148,6 +150,8 @@ class InstallWorker(QThread):
     def __init__(self, install_path):
         super().__init__()
         self.install_path = install_path
+        self._is_running = True
+        self.copied_files = []
 
     def run(self):
         files_to_copy = ["my_program.exe"]
@@ -156,15 +160,38 @@ class InstallWorker(QThread):
         os.makedirs(self.install_path, exist_ok=True)
 
         for i, file in enumerate(files_to_copy):
+            if not self._is_running:
+                self.cleanup()
+                self.progress_text.emit("Встановлення скасовано")
+                return
+
             t.sleep(1)
             src = get_resource_path(file)
             dest = os.path.join(self.install_path, file)
-            shutil.copy(src, dest)
+
+            try:
+                shutil.copy(src, dest)
+                self.copied_files.append(dest)
+            except Exception as e:
+                self.progress_text.emit(f"Помилка копіювання {file}: {e}")
+                return
+
             self.progress_update.emit(int((i + 1) / total_files * 100))
             self.progress_text.emit(f"Копіювання {file}...")
 
-        self.progress_text.emit("Застосунок встановлено")
+        self.progress_text.emit("Програма встановлена")
         t.sleep(1)
+
+    def stop(self):
+        self._is_running = False
+
+    def cleanup(self):
+        for file in self.copied_files:
+            try:
+                if os.path.exists(file):
+                    os.remove(file)
+            except Exception as e:
+                self.progress_text.emit(f"Не вдалося видалити {file}: {e}")
 
 
 def get_resource_path(relative_path):
