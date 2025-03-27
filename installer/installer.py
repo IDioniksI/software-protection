@@ -130,7 +130,7 @@ class Installer(QMainWindow):
         self.progress_label.setText("Встановлення завершено")
 
         all_info = get_information(os.path.splitdrive(self.path_edit.text())[0] + r'\\')
-        print(all_info)
+        # print(all_info)
         keys_generation_data_signing(all_info)
 
         self.stacked_widget.setCurrentWidget(self.page_finish)
