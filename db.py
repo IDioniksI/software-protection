@@ -1,10 +1,10 @@
 import sqlite3
 import bcrypt
-import re
+import os
 
 class UsersDB:
-    def __init__(self):
-        self.connection = sqlite3.connect("users.db")
+    def __init__(self, connection=None):
+        self.connection = connection or sqlite3.connect(":memory:")
         self.cursor = self.connection.cursor()
         self.create_tables()
         self.create_admin_user()
@@ -42,11 +42,6 @@ class UsersDB:
                 VALUES ('ADMIN', '', 'admin', 0, 0, 1)
             """)
 
-    # def get_user(self, login, password):
-    #     with self.connection:
-    #         self.cursor.execute("SELECT * FROM users WHERE login = ? AND password = ?", (login, password))
-    #         return self.cursor.fetchone()
-
     def get_user(self, login, password):
         with self.connection:
             self.cursor.execute("SELECT * FROM users WHERE login = ?", (login,))
@@ -65,11 +60,6 @@ class UsersDB:
             self.cursor.execute("SELECT login FROM users")
             return [row[0] for row in self.cursor.fetchall()]
 
-    # def create_user(self, login, password, role='user', password_restriction=1, block=0):
-    #     with self.connection:
-    #         self.cursor.execute("INSERT INTO users (login, password, role, password_restriction, block) "
-    #                             "VALUES (?, ?, ?, ?, ?)", (login, password, role, password_restriction, block))
-
     def create_user(self, login, password, role='user', password_restriction=1, block=0, first_ent=1):
         hashed_password = self.hash_password(password)
         with self.connection:
@@ -80,10 +70,6 @@ class UsersDB:
         with self.connection:
             self.cursor.execute("SELECT 1 FROM users WHERE login = ?", (login,))
             return self.cursor.fetchone() is not None
-
-    # def change_password(self, login, new_password):
-    #     with self.connection:
-    #         self.cursor.execute("UPDATE users SET password = ? WHERE login = ?", (new_password, login))
 
     def change_password(self, login, new_password):
         hashed_password = self.hash_password(new_password)
@@ -125,6 +111,38 @@ class UsersDB:
         with self.connection:
             self.cursor.execute("SELECT block FROM users WHERE login = ?", (login,))
             return self.cursor.fetchone()[0]
+
+
+def load_to_memory_from_file(file_db_path: str) -> sqlite3.Connection:
+    file_conn = sqlite3.connect(file_db_path)
+    mem_conn = sqlite3.connect(":memory:")
+    file_conn.backup(mem_conn)
+    file_conn.close()
+    os.remove(file_db_path)
+    return mem_conn
+
+
+def save_connection_to_bytes(conn: sqlite3.Connection) -> bytes:
+    temp_file = "temp.db"
+    disk_conn = sqlite3.connect(temp_file)
+    conn.backup(disk_conn)
+    disk_conn.close()
+    with open(temp_file, "rb") as f:
+        data = f.read()
+    os.remove(temp_file)
+    return data
+
+
+def load_bytes_to_connection(data: bytes) -> sqlite3.Connection:
+    temp_file = "temp_decrypted.db"
+    with open(temp_file, "wb") as f:
+        f.write(data)
+    mem_conn = sqlite3.connect(":memory:")
+    disk_conn = sqlite3.connect(temp_file)
+    disk_conn.backup(mem_conn)
+    disk_conn.close()
+    os.remove(temp_file)
+    return mem_conn
 
 
 if __name__ == '__main__':

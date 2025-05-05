@@ -5,7 +5,8 @@ from PyQt6.QtGui import QPixmap, QAction
 
 from installer.functions.get_info import get_information
 from installer.functions.registry import load_from_registry, verify_signature, hash_data
-from db import UsersDB
+from db import UsersDB, load_to_memory_from_file, save_connection_to_bytes, load_bytes_to_connection
+from installer.functions.crypto_utils import encrypt_data_aes_ctr, decrypt_data_aes_ctr
 
 import sys
 import re
@@ -13,11 +14,11 @@ import os
 
 
 class LoginDialog(QDialog):
-    def __init__(self):
+    def __init__(self, db=UsersDB()):
         super().__init__()
         self.setWindowTitle("Вхід")
         self.resize(250, 150)
-        self.db = UsersDB()
+        self.db = db
         self.selected_user = None
         self.attempts = 0
 
@@ -526,6 +527,53 @@ class ChangeUserRoleDialog(QDialog):
         self.accept()
 
 
+class CheckingSecretMessage(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Перевірка секретного повідомлення")
+        self.resize(300, 200)
+        self.db = None
+        self.password_phrase = None
+
+        self.secret_message_label = QLabel("Введіть секретне повідомлення:")
+        self.secret_message_input = QLineEdit()
+
+        self.check_button = QPushButton("Перевірити")
+        self.check_button.clicked.connect(self.check_secret_message)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.secret_message_label)
+        layout.addWidget(self.secret_message_input)
+        layout.addWidget(self.check_button)
+
+        self.setLayout(layout)
+
+    def check_secret_message(self):
+        password_phrase = self.secret_message_input.text()
+
+        if os.path.exists(DB_ENCRYPTED_FILE):
+            # print("Файл знайдено")
+            with open(DB_ENCRYPTED_FILE, "rb") as f:
+                encrypted_data = f.read()
+            try:
+                decrypted_bytes = decrypt_data_aes_ctr(encrypted_data, password_phrase)
+                memory_conn = load_bytes_to_connection(decrypted_bytes)
+                # print("Успішно розшифровано.")
+            except Exception as e:
+                # print("Помилка розшифрування:", e)
+                return
+        else:
+            # print("Файл не знайдено. Створюємо нову базу даних")
+            temp_db = UsersDB()
+            temp_db.connection.commit()
+            temp_db.connection.close()
+            memory_conn = load_to_memory_from_file("users.db")
+
+        self.db = UsersDB(connection=memory_conn)
+        self.password_phrase = password_phrase
+        self.accept()
+
+
 def checking_password(password):
     has_latin = re.search(r'[A-Za-z]', password) is not None
     has_cyrillic = re.search(r'[А-Яа-яЁёЇїІіЄєҐґ]', password) is not None
@@ -567,6 +615,8 @@ def get_resource_path(relative_path):
 
 
 if __name__ == "__main__":
+    DB_ENCRYPTED_FILE = "users_encrypted.bin"
+
     app = QApplication(sys.argv)
 
     all_info = get_information(os.path.splitdrive(os.getcwd())[0] + r'\\')
@@ -582,8 +632,25 @@ if __name__ == "__main__":
         QMessageBox.warning(None, 'Помилка', 'Інформація про систему була змінена \nПрограма закривається')
         sys.exit(0)
 
-    login_dialog = LoginDialog()
-    if login_dialog.exec() == QDialog.DialogCode.Accepted:
-        main_window = MainApp(login_dialog.selected_user, login_dialog.db)
-        main_window.show()
-        sys.exit(app.exec())
+    check_dialog = CheckingSecretMessage()
+    if check_dialog.exec() == QDialog.DialogCode.Accepted:
+        db = check_dialog.db
+        password_phrase = check_dialog.password_phrase
+
+        login_dialog = LoginDialog(db)
+        if login_dialog.exec() == QDialog.DialogCode.Accepted:
+            main_window = MainApp(login_dialog.selected_user, login_dialog.db)
+            main_window.show()
+
+            exit_code = app.exec()
+
+            # print("Зберігаємо у зашифрованому вигляді...")
+            db_bytes = save_connection_to_bytes(db.connection)
+            encrypted_output = encrypt_data_aes_ctr(db_bytes, password_phrase)
+            with open(DB_ENCRYPTED_FILE, "wb") as f:
+                f.write(encrypted_output)
+            # print("Збережено у файл:", DB_ENCRYPTED_FILE)
+
+            sys.exit(exit_code)
+
+    sys.exit(0)
