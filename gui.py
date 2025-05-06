@@ -6,7 +6,8 @@ from PyQt6.QtGui import QPixmap, QAction
 from installer.functions.get_info import get_information
 from installer.functions.registry import load_from_registry, verify_signature, hash_data
 from db import UsersDB, load_to_memory_from_file, save_connection_to_bytes, load_bytes_to_connection
-from installer.functions.crypto_utils import encrypt_data_aes_ctr, decrypt_data_aes_ctr
+# from installer.functions.crypto_utils import encrypt_data_aes_ctr, decrypt_data_aes_ctr
+from installer.functions.crypto_utils import encrypt_data_chacha, decrypt_data_chacha
 
 import sys
 import re
@@ -534,16 +535,23 @@ class CheckingSecretMessage(QDialog):
         self.resize(300, 200)
         self.db = None
         self.password_phrase = None
+        self.word_button = 'Перевірити'
+
+        banner = QLabel()
+        banner.setPixmap(QPixmap(get_resource_path("spy_small.png")))
+        banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.secret_message_label = QLabel("Введіть секретне повідомлення:")
-        self.secret_message_input = QLineEdit()
+        # self.secret_message_input = QLineEdit()
+        self.secret_message_widget, self.secret_message_input, self.toggle_button = create_password_widget()
 
-        self.check_button = QPushButton("Перевірити")
+        self.check_button = QPushButton(self.word_button)
         self.check_button.clicked.connect(self.check_secret_message)
 
         layout = QVBoxLayout()
+        layout.addWidget(banner)
         layout.addWidget(self.secret_message_label)
-        layout.addWidget(self.secret_message_input)
+        layout.addWidget(self.secret_message_widget)
         layout.addWidget(self.check_button)
 
         self.setLayout(layout)
@@ -552,18 +560,20 @@ class CheckingSecretMessage(QDialog):
         password_phrase = self.secret_message_input.text()
 
         if os.path.exists(DB_ENCRYPTED_FILE):
-            # print("Файл знайдено")
             with open(DB_ENCRYPTED_FILE, "rb") as f:
                 encrypted_data = f.read()
             try:
-                decrypted_bytes = decrypt_data_aes_ctr(encrypted_data, password_phrase)
+                decrypted_bytes = decrypt_data_chacha(encrypted_data, password_phrase)
                 memory_conn = load_bytes_to_connection(decrypted_bytes)
-                # print("Успішно розшифровано.")
             except Exception as e:
-                # print("Помилка розшифрування:", e)
+                QMessageBox.critical(
+                    self,
+                    "Помилка",
+                    "Невірна секретна фраза\n"
+                    "Будь ласка, перевірте введене значення",
+                )
                 return
         else:
-            # print("Файл не знайдено. Створюємо нову базу даних")
             temp_db = UsersDB()
             temp_db.connection.commit()
             temp_db.connection.close()
@@ -616,6 +626,7 @@ def get_resource_path(relative_path):
 
 if __name__ == "__main__":
     DB_ENCRYPTED_FILE = "users_encrypted.bin"
+    exit_code = 0
 
     app = QApplication(sys.argv)
 
@@ -633,23 +644,31 @@ if __name__ == "__main__":
         sys.exit(0)
 
     check_dialog = CheckingSecretMessage()
+    if os.path.exists(DB_ENCRYPTED_FILE):
+        check_dialog.setWindowTitle("Перевірка секретного повідомлення")
+        check_dialog.check_button.setText = "Перевірити"
+    else:
+        check_dialog.setWindowTitle("Запис секретного повідомлення")
+        check_dialog.check_button.setText("Зберегти")
+
     if check_dialog.exec() == QDialog.DialogCode.Accepted:
         db = check_dialog.db
         password_phrase = check_dialog.password_phrase
 
         login_dialog = LoginDialog(db)
-        if login_dialog.exec() == QDialog.DialogCode.Accepted:
-            main_window = MainApp(login_dialog.selected_user, login_dialog.db)
-            main_window.show()
 
-            exit_code = app.exec()
+        try:
+            if login_dialog.exec() == QDialog.DialogCode.Accepted:
+                main_window = MainApp(login_dialog.selected_user, login_dialog.db)
+                main_window.show()
 
-            # print("Зберігаємо у зашифрованому вигляді...")
+                exit_code = app.exec()
+
+        finally:
             db_bytes = save_connection_to_bytes(db.connection)
-            encrypted_output = encrypt_data_aes_ctr(db_bytes, password_phrase)
+            encrypted_output = encrypt_data_chacha(db_bytes, password_phrase)
             with open(DB_ENCRYPTED_FILE, "wb") as f:
                 f.write(encrypted_output)
-            # print("Збережено у файл:", DB_ENCRYPTED_FILE)
 
             sys.exit(exit_code)
 

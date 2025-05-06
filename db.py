@@ -134,6 +134,9 @@ def save_connection_to_bytes(conn: sqlite3.Connection) -> bytes:
 
 
 def load_bytes_to_connection(data: bytes) -> sqlite3.Connection:
+    if not data.startswith(b'SQLite format 3\x00'):
+        raise ValueError("Файл не є SQLite-базою")
+
     temp_file = "temp_decrypted.db"
     with open(temp_file, "wb") as f:
         f.write(data)
